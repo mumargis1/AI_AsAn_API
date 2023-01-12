@@ -1,5 +1,8 @@
 
 Include/
+venv/
+nbs/
+test.ipynb
 AI_as_an_API.code-workspace/
 Scripts/
 Lib/
