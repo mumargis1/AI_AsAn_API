@@ -1,5 +1,5 @@
 cassandra-driver
-fastai
+fastapi
 gunicorn
 jupyter
 pandas
@@ -7,3 +7,4 @@ pypyr
 python-dotenv
 tensorflow
 uvicorn
+boto3

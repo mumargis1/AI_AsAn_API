@@ -1,7 +1,10 @@
 
 Include/
+models/
 venv/
-nbs/
+app/ignored/
+# nbs/
+.env/
 test.ipynb
 AI_as_an_API.code-workspace/
 Scripts/
