@@ -1,8 +1,15 @@
 import pathlib
 from fastapi import FastAPI
 from typing import Optional
+from fastapi.responses import StreamingResponse
+from cassandra.cqlengine.management import sync_table
+from cassandra.query import SimpleStatement
 
-from . import (ml, config)
+from . import (
+    ml,
+    config,
+    models,
+    db)
 
 app = FastAPI()
 settings = config.Settings()
@@ -15,24 +22,66 @@ TOKENIZER_PATH = SMS_SPAM_MODEL_DIR / "spam-classifer-tokenizer.json"
 METADATA_PATH = SMS_SPAM_MODEL_DIR / "spam-classifer-metadata.json"
 
 AI_MODEL = None
+DB_SESSION = None
+SMSInference = models.SMSInferece
+
 
 @app.on_event("startup")
 def on_startup():
-    global AI_MODEL
+    global AI_MODEL, DB_SESSION
     AI_MODEL = ml.AIModel(
         model_path=MODEL_PATH,
         tokenizer_path=TOKENIZER_PATH,
         metadata_path=METADATA_PATH
     )
+    DB_SESSION = db.get_session()
+    print("DB_SESSION:", DB_SESSION)
+    sync_table(SMSInference)
 
 @app.get("/")
 def read_index(q:Optional[str] = None):
     global AI_MODEL
     query = q or "HELO WORLD"
     prediction = AI_MODEL.predict_text(query)
-    return {"query": query,
-            "results":prediction,
-            "db_client_id":settings.db_client_id}
+    top = prediction.get('top')
+    data = {"query":query, **top}
+    print(data)
+    obj = SMSInference.objects.create(**data)
+    return obj
+    # return {"query":query, "results":prediction}
+
+@app.get("/inferences") #/?q=this is awsome
+def list_inferences():
+    q = SMSInference.objects.all()
+    print(q)
+    return list(q)
+
+@app.get("/inferences/{my_uuid}") #/?qthis is awsome
+def read_index(my_uuid):
+    obj = SMSInference.objects.get(uuid=my_uuid)
+    return obj
+
+def fetch_rows(
+    stmt:SimpleStatement,
+    fetch_size:int=25,
+    session=None):
+    stmt.fetch_size = fetch_size
+    result_set = session.execute(stmt)
+    has_pages = result_set.has_more_pages
+    yield "uuid, label, confidence, query\n"
+    while has_pages:
+        for row in result_set.current_rows:
+            yield f"{row['uuid']},{row['label']}, {row['confidence']}, {row['qurey']}\n"
+        has_pages = result_set.has_more_pages
+        result_set = session.execute(stmt, paging_state=result_set.paging_state)
+
+@app.get("/dataset")
+def export_inferences():
+    global DB_SESSION
+    cql_query = "SELECT * FROM spam_inferences.smsinferece LIMIT 10000"
+    # rows = DB_SESSION.execute(cql_query)
+    statement = SimpleStatement(cql_query)
+    return StreamingResponse(fetch_rows(statement, 25, DB_SESSION))
 
 # @app.on_event("startup")
 # def on_startup():

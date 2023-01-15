@@ -68,12 +68,12 @@ class AIModel:
 
     def label_pred(self, idx, val):
         legend = self.get_label_legend_inverted()
-        return {"label":legend[str(idx)], "confidence": val}
+        return {"label":legend[str(idx)], "confidence": float(val)}
 
     def get_top_preds_labled(self, preds):
         top_idx_val = np.argmax(preds)
         val = preds[top_idx_val]
-        return self.label_pred(top_idx_val, val)
+        return self.label_pred(top_idx_val, float(val))
 
     def predict_text(self, query:str,
                     include_top=True,

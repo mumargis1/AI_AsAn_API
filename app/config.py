@@ -1,7 +1,8 @@
 import os
-
 from functools import lru_cache
 from pydantic import BaseSettings, Field
+
+os.environ['CONFIG_ALLOW_SCHEMA_MANAGEMENT']='1'
 
 class Settings(BaseSettings):
     aws_secret_access_key: str = None
