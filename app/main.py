@@ -68,7 +68,7 @@ def fetch_rows(
     stmt.fetch_size = fetch_size
     result_set = session.execute(stmt)
     has_pages = result_set.has_more_pages
-    yield "uuid, label, confidence, query\n"
+    yield "uuid, label, confidence, queary\n"
     while has_pages:
         for row in result_set.current_rows:
             yield f"{row['uuid']},{row['label']}, {row['confidence']}, {row['qurey']}\n"
