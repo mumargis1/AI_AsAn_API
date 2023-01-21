@@ -9,7 +9,8 @@ from . import (
     ml,
     config,
     models,
-    db)
+    db,
+    schema)
 
 app = FastAPI()
 settings = config.Settings()
@@ -23,7 +24,7 @@ METADATA_PATH = SMS_SPAM_MODEL_DIR / "spam-classifer-metadata.json"
 
 AI_MODEL = None
 DB_SESSION = None
-SMSInference = models.SMSInferece
+SMSInference = models.SMSInference
 
 
 @app.on_event("startup")
@@ -40,15 +41,19 @@ def on_startup():
 
 @app.get("/")
 def read_index(q:Optional[str] = None):
+    return{"hello": "world"}
+    # return {"query":query, "results":prediction}
+
+@app.post("/")
+def create_inference(query:schema.Query):
     global AI_MODEL
-    query = q or "HELO WORLD"
-    prediction = AI_MODEL.predict_text(query)
+    prediction = AI_MODEL.predict_text(query.q)
     top = prediction.get('top')
-    data = {"query":query, **top}
+    data = {"query":query.q, **top}
     print(data)
     obj = SMSInference.objects.create(**data)
     return obj
-    # return {"query":query, "results":prediction}
+
 
 @app.get("/inferences") #/?q=this is awsome
 def list_inferences():
@@ -62,11 +67,13 @@ def read_index(my_uuid):
     return obj
 
 def fetch_rows(
-    stmt:SimpleStatement,
-    fetch_size:int=25,
-    session=None):
+        stmt:SimpleStatement,
+        fetch_size:int=25,
+        session=None):
+
     stmt.fetch_size = fetch_size
     result_set = session.execute(stmt)
+    print("result_set",result_set)
     has_pages = result_set.has_more_pages
     yield "uuid, label, confidence, queary\n"
     while has_pages:
@@ -75,13 +82,52 @@ def fetch_rows(
         has_pages = result_set.has_more_pages
         result_set = session.execute(stmt, paging_state=result_set.paging_state)
 
-@app.get("/dataset")
+def fetch_rows(
+        stmt:SimpleStatement,
+        fetch_size:int = 25,
+        session=None):
+    stmt.fetch_size = fetch_size
+    result_set = session.execute(stmt)
+    has_pages = result_set.has_more_pages
+    yield "uuid,label,confidence,query,version\n"
+    while has_pages:
+        for row in result_set.current_rows:
+            yield f"{row['uuid']},{row['label']},{row['confidence']},{row['query']},{row['model_version']}\n"
+        has_pages = result_set.has_more_pages
+        result_set = session.execute(stmt, paging_state=result_set.paging_state)
+
+@app.get("/dataset") # /?q=this is awesome
+def export_inferences():
+    # global DB_SESSION
+    cql_query = "SELECT * FROM spam_inferences.smsinference LIMIT 10000"
+    statement = SimpleStatement(cql_query)
+    # rows = DB_SESSION.execute(cql_query)
+    return StreamingResponse(fetch_rows(statement, 25, DB_SESSION))
+
+
+def fetch_rows2(stmt, size:int=25, session=None):
+    # stmt.fetch_size = size
+    result_set = session.execute(stmt)
+    yield "uuid, label, confidence, query, version"
+    has_pages = result_set.has_more_pages
+    while has_pages:
+        for row in result_set:
+            print(row)
+            yield f"{row['uuid']}, {row['label']}, {row['confidence']}, {row['query']}, {row['model_version']}\n"
+            print("__________")
+        has_pages = result_set.has_more_pages
+        result_set = session.execute(stmt, paging_state=result_set.paging_state)
+
+@app.get("/datasets")
 def export_inferences():
     global DB_SESSION
-    cql_query = "SELECT * FROM spam_inferences.smsinferece LIMIT 10000"
+    cql_query = "SELECT * FROM spam_inferences.smsinference LIMIT 100"
     # rows = DB_SESSION.execute(cql_query)
     statement = SimpleStatement(cql_query)
-    return StreamingResponse(fetch_rows(statement, 25, DB_SESSION))
+    # print(statement)
+    # return list(rows)
+    return StreamingResponse(fetch_rows2(statement, 25, DB_SESSION))
+
 
 # @app.on_event("startup")
 # def on_startup():
